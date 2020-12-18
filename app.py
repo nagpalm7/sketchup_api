@@ -3,6 +3,7 @@ import cv2
 import os
 from werkzeug.utils import secure_filename
 from flask_api import status
+import numpy as np
 
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg', 'svg'])
 UPLOAD_FOLDER = 'uploads'
@@ -25,12 +26,17 @@ def post_something():
         filename = secure_filename(file.filename)
         path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(path)
-        img = cv2.imread(path)
+        img = cv2.imread(path, -1)
         # Convert the image into grayscale image
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        alpha = img[:,:,3]
+        rgb = img[:,:,:-1]
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        rgb_gray = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        alpha = np.reshape(alpha, (*alpha.shape,1))
+        gray_alpha = np.concatenate([rgb_gray, alpha], axis=2)
         # Blur the image using Gaussian Blur 
-        gray_blur = cv2.GaussianBlur(gray, (25, 25), 0)
-        # Convert the image into pencil sketch
+        gray_blur = cv2.GaussianBlur(gray_alpha, (31, 31), 0)
+
         scale = 250.0
         if request.form.get('scale'):
             try:
@@ -41,8 +47,8 @@ def post_something():
                 })
                 return msg , status.HTTP_400_BAD_REQUEST
 
-
-        cartoon = cv2.divide(gray, gray_blur, scale=scale)
+        # Convert the image into pencil sketch
+        cartoon = cv2.divide(gray_alpha, gray_blur, scale=scale)
         cv2.imwrite(path, cartoon)
         return send_file(path, mimetype='image/png')
     else:
